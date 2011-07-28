@@ -8,6 +8,7 @@
  * - V1
  * - V2: Korrektur in Kommetaren für Bit 9: D7 statt C0
  * - V3: Scan-Codes mit Bits F0, F1, F4, F5, F6, F7
+ * - V4: NEC-Codes wie Button Box
  * 
  * Anschlüsse:
  * 
@@ -115,40 +116,26 @@ struct subst_info subst_names[] = {
 
 /*
  * Infrarot-Codes, die für die erkannten Substanzen gesendet werden
- * 12 Bits rückwärts, 7 Bit Code + 5 Bit Device. Device=1: Television
- * 1000.00|10.0000
- * 0100.00|10.0000
- * 1100.00|10.0000
- * 0010.00|10.0000
- * 1010.00|10.0000
- * 0110.00|10.0000
- * 1110.00|10.0000
- * 0001.00|10.0000
- * 1001.00|10.0000
- * 0101.00|10.0000
- * 1101.00|10.0000
- * 0011.00|10.0000
- * 1011.00|10.0000
  */
-struct sony_info {
+struct nec_info {
   int in;
   int out;
 };
 
-#define SONY_COUNT 12
-struct sony_info sony_codes[] = {
-  { 1, 0x820 },
-  { 2, 0x420 },
-  { 3, 0xC20 },
-  { 4, 0x220 },
-  { 5, 0xA20 },
-  { 6, 0x620 },
-  { 7, 0xE20 },
-  { 8, 0x120 },
-  { 9, 0x920 },
-  { 10, 0x520 },
-  { 11, 0xD20 },
-  { 12, 0xB20 }
+#define NEC_COUNT 12
+struct nec_info nec_codes[] = {
+  { 1, 0xC308F7 },
+  { 2, 0xC38877 },
+  { 3, 0xC348B7 },
+  { 4, 0xC3C837 },
+  { 5, 0xC330CF },
+  { 6, 0xC3B04F },
+  { 7, 0xC3708F },
+  { 8, 0xC3F00F },
+  { 9, 0xC310EF },
+  { 10, 0xC3906F },
+  { 11, 0xC350AF },
+  { 12, 0xC3D02F }
 };
 
 IRsend irsend;
@@ -226,10 +213,10 @@ subst_code(int modules[]) {
  * nach Code zum Senden via Infrarot
  */
 int
-sony_code(int code) {
-  for (int i = 0; i < SONY_COUNT; i++) {
-    if (code == sony_codes[i].in) {
-      return sony_codes[i].out;
+nec_code(int code) {
+  for (int i = 0; i < NEC_COUNT; i++) {
+    if (code == nec_codes[i].in) {
+      return nec_codes[i].out;
     }
   }
   return 0;
@@ -346,12 +333,9 @@ void loop() {
   
   // falls bekannt und geändert
   if (code > 0 && substance != code) {
-    int ir_code = sony_code(code);
+    int ir_code = nec_code(code);
 
-    for (int i = 0; i < 3; i++) {
-      irsend.sendSony(ir_code, 12);
-      delay(100);
-    }
+    irsend.sendNEC(ir_code, 32);
     substance = code;
   }
 } // loop
