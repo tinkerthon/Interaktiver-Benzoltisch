@@ -5,8 +5,9 @@
  * der Arduino 0022-Entwicklungsumgebung
  *
  * 2011-07-25 Olav Schettler <olav@tinkerthon.de>
- * - V1.0
- * - V1.1: Korrektur in Kommetaren für Bit 9: D7 statt C0
+ * - V1
+ * - V2: Korrektur in Kommetaren für Bit 9: D7 statt C0
+ * - V3: Scan-Codes mit Bits F0, F1, F4, F5, F6, F7
  * 
  * Anschlüsse:
  * 
@@ -15,14 +16,20 @@
  *  - Standard-LED an D6
  *  - Ports B0..B7, D7 für neun Reed-Schaltereingänge
  *  - Ports F0..F5 für Auswahl des abgetasteten "C"-Atoms
+ * 
+ * Anschluss über zweireihige Stiftleisten 5x2 und Flachbandkabel
+ * Jede Molekülgruppe des Tisches signalisiert über 9 Reed-Schalter
+ * ihre Identität. Über eine Infrarot-Diode wird ein Video 
+ * zur identifizierten SUbstanz gestartet. 
  */
 
 #include <IRremote.h>
 
+int version = 3;
 int single_step;
 
 int scan_code[] = {
-  0x3E, 0x3D, 0x3B, 0x37, 0x2F, 0x1F
+  0xFE, 0xFD, 0xEF, 0xDF, 0xBF, 0x7F
 };
 
 int module[6]; // die sechs Molekülgruppen an den "C"-Atomen
@@ -39,7 +46,16 @@ int substance = 0; // 1..12 - die resultierende Substanz
 #define MOD_OH     0x111
 #define MOD_C2H3   0x121
 #define MOD_COH    0x181
-#define MOD_TRALLA 0x1E1
+
+#define MOD_T0     0x1FE
+#define MOD_T1     0x1FD
+#define MOD_T2     0x1FB
+#define MOD_T3     0x1F7
+#define MOD_T4     0x1EF
+#define MOD_T5     0x1DF
+#define MOD_T6     0x1BF
+#define MOD_T7     0x17F
+#define MOD_T8     0x0FF
 
 /*
  * Klartextnamen für Debug-Ausgabe
@@ -49,7 +65,7 @@ struct mod_info {
   char* name;
 };
 
-#define MODULE_COUNT 11
+#define MODULE_COUNT 19
 struct mod_info mod_names[] = {
   { MOD_H, "H" },
   { MOD_NH2, "NH2" },
@@ -61,7 +77,16 @@ struct mod_info mod_names[] = {
   { MOD_OH, "OH" },
   { MOD_C2H3, "C2H3" },
   { MOD_COH, "COH" },
-  { MOD_TRALLA, "TRALLA" }
+
+  { MOD_T0, "T0" },
+  { MOD_T1, "T1" },
+  { MOD_T2, "T2" },
+  { MOD_T3, "T3" },
+  { MOD_T4, "T4" },
+  { MOD_T5, "T5" },
+  { MOD_T6, "T6" },
+  { MOD_T7, "T7" },
+  { MOD_T8, "T8" }
 };
 
 /*
@@ -192,7 +217,7 @@ subst_code(int modules[]) {
     } // mirror
   } // alle Substanzen
   
-  Serial.println("(unbekannt)");
+  //Serial.println("(unbekannt)");
   return 0;
 }
 
@@ -259,6 +284,8 @@ void loop() {
   }
 
   if (single_step) {
+    Serial.print("\nBenzoltisch v");
+    Serial.println(version);
     Serial.println("\nSINGLE:");
   }
   
