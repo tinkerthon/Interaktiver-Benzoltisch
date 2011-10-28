@@ -6,9 +6,11 @@
  *
  * 2011-07-25 Olav Schettler <olav@tinkerthon.de>
  * - V1
- * - V2: Korrektur in Kommetaren für Bit 9: D7 statt C0
+ * - V2: Korrektur in Kommentaren für Bit 9: D7 statt C0
  * - V3: Scan-Codes mit Bits F0, F1, F4, F5, F6, F7
  * - V4: NEC-Codes wie Button Box
+ * - V5: Bits 0,1,4,5,6,7 an Port F sind Ausgänge
+ * - V7: Live. Neue Substanzgruppen. IR-Codes sind "long". Wird nach "unbekannt" die selbe Substanz wieder gelegt, wird auch ein einerneutes IR-Signal gesendet. 
  * 
  * Anschlüsse:
  * 
@@ -21,25 +23,48 @@
  * Anschluss über zweireihige Stiftleisten 5x2 und Flachbandkabel
  * Jede Molekülgruppe des Tisches signalisiert über 9 Reed-Schalter
  * ihre Identität. Über eine Infrarot-Diode wird ein Video 
- * zur identifizierten SUbstanz gestartet. 
+ * zur identifizierten Substanz gestartet. 
  */
 
 #include <IRremote.h>
 
-int version = 3;
+int version = 7;
 int single_step;
+int count = 0;
+
+/*
+Bits: 76543210 11110011 = F3
+0 1 4 5 6 7
+
+76543210
+11111110 - FE
+11111101 - FD
+11101111 - EF 
+11011111 - DF
+10111111 - BF
+01111111 - 7F
+*/
 
 int scan_code[] = {
   0xFE, 0xFD, 0xEF, 0xDF, 0xBF, 0x7F
 };
 
+// Nur das aktive Bit ist Ausgang, die anderen sind Eingänge
+int dir_code[] = {
+  0x01, 0x02, 0x10, 0x20, 0x40, 0x80
+};
+
 int module[6]; // die sechs Molekülgruppen an den "C"-Atomen
 int substance = 0; // 1..12 - die resultierende Substanz
 
+char* subst_name;
+
+/*
 // bekannte Module
 #define MOD_H      0x0FE
 #define MOD_NH2    0x105
 #define MOD_CH3    0x005
+//#define MOD_CH3    0x005
 #define MOD_NO2_1  0x004
 #define MOD_NO2_2  0x104
 #define MOD_COOH   0x009
@@ -47,6 +72,40 @@ int substance = 0; // 1..12 - die resultierende Substanz
 #define MOD_OH     0x111
 #define MOD_C2H3   0x121
 #define MOD_COH    0x181
+*/
+
+/* V5
+// bekannte Module
+#define MOD_H      0x101
+//#define MOD_NH2    0x105
+#define MOD_NH2    0x17D
+#define MOD_CH3    0x0F7
+#define MOD_NO2_1  0x004
+#define MOD_NO2_2  0x104
+#define MOD_COOH   0x1EE
+//#define MOD_COOH   0x009
+#define MOD_CH3COO 0x108
+#define MOD_OH     0x111
+#define MOD_C2H3   0x121
+#define MOD_COH    0x181
+*/
+
+// bekannte Module
+#define MOD_H      0x101
+#define MOD_COOH   0x1EE
+#define MOD_NO2_1  0x1F7
+#define MOD_NO2_2  0x1F6
+#define MOD_NH2    0x0FA
+#define MOD_CH3    0x0F7
+#define MOD_CH3COO 0x0EF
+
+#define MOD_OH     0x0BF
+#define MOD_COH    0x0DF
+
+#define MOD_OCH3    0x0DD
+
+#define MOD_C2H3   0x121
+
 
 #define MOD_T0     0x1FE
 #define MOD_T1     0x1FD
@@ -79,7 +138,8 @@ struct mod_info mod_names[] = {
   { MOD_C2H3, "C2H3" },
   { MOD_COH, "COH" },
 
-  { MOD_T0, "T0" },
+  { MOD_OCH3, "OCH3" },
+
   { MOD_T1, "T1" },
   { MOD_T2, "T2" },
   { MOD_T3, "T3" },
@@ -100,18 +160,27 @@ struct subst_info {
   char* name;
 };
 
-#define SUBST_COUNT 10
+#define SUBST_COUNT 14
 struct subst_info subst_names[] = {
   { { MOD_H, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 1, "Benzol" },
   { { MOD_NH2, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 2, "Anilin" },
-  { { MOD_COOH, MOD_CH3COO, MOD_H, MOD_H, MOD_H, MOD_H }, 3, "Acetylsalicylsaeure" },
-  { { MOD_CH3, MOD_NO2_1, MOD_H, MOD_NO2_2, MOD_H, MOD_NO2_2 }, 4, "TNT" },
-  { { MOD_CH3, MOD_NO2_2, MOD_H, MOD_NO2_1, MOD_H, MOD_NO2_2 }, 4, "TNT" },
-  { { MOD_CH3, MOD_NO2_2, MOD_H, MOD_NO2_2, MOD_H, MOD_NO2_1 }, 4, "TNT" },
+
+  { { MOD_CH3, MOD_NO2_1, MOD_H, MOD_NO2_1, MOD_H, MOD_NO2_2 }, 3, "TNT" },
+  { { MOD_CH3, MOD_NO2_2, MOD_H, MOD_NO2_1, MOD_H, MOD_NO2_1 }, 3, "TNT" },
+  { { MOD_CH3, MOD_NO2_1, MOD_H, MOD_NO2_2, MOD_H, MOD_NO2_1 }, 3, "TNT" },
+
+  { { MOD_CH3, MOD_NO2_1, MOD_H, MOD_NO2_2, MOD_H, MOD_NO2_2 }, 3, "TNT" },
+  { { MOD_CH3, MOD_NO2_2, MOD_H, MOD_NO2_1, MOD_H, MOD_NO2_2 }, 3, "TNT" },
+  { { MOD_CH3, MOD_NO2_2, MOD_H, MOD_NO2_2, MOD_H, MOD_NO2_1 }, 3, "TNT" },
+
+  { { MOD_COOH, MOD_CH3COO, MOD_H, MOD_H, MOD_H, MOD_H }, 4, "Acetylsalicylsaeure" },
+
   { { MOD_COOH, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 5, "Benzoesaeure" },
-  { { MOD_OH, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 6, "Phenol" },
-  { { MOD_C2H3, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 7, "Styrol" },
-  { { MOD_COH, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 8, "Benzaldehyd" }
+  { { MOD_C2H3, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 6, "Styrol" },
+  { { MOD_OCH3, MOD_H, MOD_H, MOD_COH, MOD_H, MOD_OH }, 7, "Vanilin" },
+  { { MOD_OH, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 8, "Phenol" },
+
+  { { MOD_COH, MOD_H, MOD_H, MOD_H, MOD_H, MOD_H }, 9, "Benzaldehyd" }
 };
 
 /*
@@ -119,7 +188,7 @@ struct subst_info subst_names[] = {
  */
 struct nec_info {
   int in;
-  int out;
+  long out;
 };
 
 #define NEC_COUNT 12
@@ -197,7 +266,7 @@ subst_code(int modules[]) {
         
         if (match) {
           // Alle Baugruppen passen
-          Serial.println(subst_names[i].name);
+          subst_name = subst_names[i].name;
           return subst_names[i].code;
         }
       } // rotate
@@ -205,6 +274,7 @@ subst_code(int modules[]) {
   } // alle Substanzen
   
   //Serial.println("(unbekannt)");
+  subst_name = "(unbekannt)";
   return 0;
 }
 
@@ -212,7 +282,7 @@ subst_code(int modules[]) {
  * Dekodiere Substanz-Code 
  * nach Code zum Senden via Infrarot
  */
-int
+long
 nec_code(int code) {
   for (int i = 0; i < NEC_COUNT; i++) {
     if (code == nec_codes[i].in) {
@@ -229,7 +299,10 @@ void setup() {
   pinMode(PIN_C6, INPUT_PULLUP); // Taster
   pinMode(PIN_D6, OUTPUT); // LED
   
-  DDRF = 0x3F; // Port F, Bits 0..5 sind Ausgänge
+  // Port F, Bits 0,1,4,5,6,7 sind angeschlossen. Zunächst alles Eingänge
+  DDRF = 0x00; // 0xF3
+  PORTF = 0x00; // PORT F immer auf LOW. Steuerung über Eingänge
+  
   DDRB = 0x00; // Port B, Bits 0..7 sind Eingänge
   PORTB = 0xFF; // Bits 0..7 haben Pullups
   pinMode(PIN_D7, INPUT_PULLUP); // ... zusätzlich D7 als Bit 8
@@ -239,18 +312,32 @@ void setup() {
 
   // für Debug-Ausgaben an Computer oder LCD-Display
   Serial.begin(9600);
+  hello();
+}
+
+void hello() {
+  Serial.print("\nBenzoltisch v");
+  Serial.println(version);
 }
 
 /**
  * Standard Arduino loop()
  */
 void loop() {
+  /* Debug
+  Serial.println("\n--------------------");
+  Serial.println(count++);
+  delay(1000);
+  */
+  //delay(100);
+  
   // Soll die Abtastung im Einzelschritt erfolgen? 
   if (digitalRead(PIN_C6)) {
     // Taster ist nicht gedrückt
     
     if (single_step) {
       // falls Wechsel, Ausgabe
+      hello();
       Serial.println("\nAUTO...");
     }
 
@@ -261,18 +348,17 @@ void loop() {
     // Taster ist gedrückt
     single_step = 1;
     digitalWrite(PIN_D6, HIGH); // LED an
+
+    // Warten auf Loslassen des Tasters
+    while (!digitalRead(PIN_C6)) { delay(50); }
   }
   
-  // Warten auf Loslassen des Tasters
-  while (!digitalRead(PIN_C6)) { delay(50); }
-
   for (int i = 0; i < 6; i++) {
     module[i] = 0;
   }
 
   if (single_step) {
-    Serial.print("\nBenzoltisch v");
-    Serial.println(version);
+    hello();
     Serial.println("\nSINGLE:");
   }
   
@@ -281,17 +367,32 @@ void loop() {
    * Jede Baugruppe schaltet 9 Signale über Reed-Schalter
    */
   for (int step = 0; step < 6; step++) {
+    // nur die aktive Spalte is Ausgang, alle anderen sind als Eingang geschaltet
+    DDRF = dir_code[step];
+    
     // schreibe Spalte
-    PORTF = scan_code[step]; // ein Bit von 6 ist LOW
+    //PORTF = scan_code[step]; // ein Bit von 6 ist LOW
     
     if (single_step) {
       while (digitalRead(PIN_C6)) { delay(50); }
-    } 
+    }
+    else {
+      // Kurze Wartezeit, bis sich Pegel aufgebaut haben
+      delay(50);
+    }
     
     /*
      * lese Zeile
      */
-    module[step] = PINB;
+    if (single_step) {
+      Serial.print(step);
+      Serial.print(" PORTB direkt ");
+      Serial.print(PINB, BIN);
+      Serial.print(", Bit 9: ");
+      Serial.println(digitalRead(PIN_D7), BIN);
+    }
+     
+    module[step] = PINB;    
 
     // Setze Bit 8 durch separates Lesen von D7
     if (digitalRead(PIN_D7)) {
@@ -320,6 +421,10 @@ void loop() {
   
   if (single_step) {
     Serial.println("Ergebnis:");
+    
+    //Serial.print("Test: H=");    
+    //Serial.println(mod_name(0x101));
+    
     for (int i = 0; i < 6; i++) {
       Serial.print(i);
       Serial.print(": ");
@@ -331,11 +436,27 @@ void loop() {
   
   int code = subst_code(module);
   
-  // falls bekannt und geändert
-  if (code > 0 && substance != code) {
-    int ir_code = nec_code(code);
+  // Falls bekannt und geändert. In jedem Fall bei Single Step
+  if (single_step || /*code > 0 &&*/ substance != code) {
+    long ir_code = nec_code(code);
 
-    irsend.sendNEC(ir_code, 32);
+    Serial.print("Neu! ");
+    Serial.print(subst_name);
+    Serial.print(", Code: ");
+    Serial.print(code);
+    Serial.print(", IR-Code: ");
+    Serial.println(ir_code, HEX);
+
+    if (ir_code > 0) {
+      irsend.sendNEC(ir_code, 32);
+    }
+  /*
+    // Richtig oft senden, damit Spieler das SIgnal mitbekommt
+    for (int i = 0; i < 100; i++) {
+      irsend.sendNEC(ir_code, 32);
+    }  
+  */
+
     substance = code;
   }
 } // loop
