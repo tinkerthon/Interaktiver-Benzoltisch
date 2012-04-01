@@ -1,0 +1,9 @@
+This is code for the Interactive Benzoltisch at Deutsches Museum in Bonn.
+
+The implementation is based on a Teensy 2.0 and the Arduino 0022 IDE.
+
+In October 2011, the microcontroller-based implementation replaced the previously used wired connection of the reed switches with a play button box to control the video player (a EYEZONE B1080P-2) in the table.
+
+The Teensy now controls the video player directly using an infrared LED and the NEC IR codes that I pried from the button box.
+
+Please cf. http://tinkerthon.de/interaktiver-benzoltisch-im-deutschen-museum-bonn/ for more details. 
